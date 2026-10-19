@@ -167,11 +167,13 @@ node scripts/smoke-check.mjs <app binary or AppImage>   # render-check of core/f
 
 For an AppImage in a container, set `APPIMAGE_EXTRACT_AND_RUN=1`.
 
-## Continuous integration and releases
+## Releases
 
-`.github/workflows/build.yml` runs on every push to `main` and every pull
-request:
+`.github/workflows/build.yml` runs only when a version tag (`v*`) is pushed;
+pushes to branches and pull requests do not trigger it. It runs these jobs:
 
+- **Version:** checks that `core/package.json` and `linux/package.json` agree
+  and match the tag.
 - **macOS:** builds the app for Apple Silicon (`macos-15`) and Intel
   (`macos-15-intel`), smoke-tests each with `--render-check`, and packages a
   DMG.
@@ -179,20 +181,27 @@ request:
   the oldest supported Ubuntu, so the AppImage runs on older glibc; runs the
   typecheck, unit and end-to-end tests under Xvfb; packages the AppImage and
   smoke-tests it.
+- **Release:** publishes a GitHub release for the tag.
 
-The four packages are kept as workflow artifacts for 14 days.
-
-To publish a release, keep `core/package.json` and `linux/package.json` at
-the same version, then push a matching tag:
+To publish a release, set the same version in `core/package.json` and
+`linux/package.json`, commit, then push a matching tag:
 
 ```sh
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-The release job attaches `MDView-<version>-macos-arm64.dmg`,
+The release attaches `MDView-<version>-macos-arm64.dmg`,
 `MDView-<version>-macos-x86_64.dmg`, `MDView-<version>-linux-amd64.AppImage`,
-`MDView-<version>-linux-arm64.AppImage` and `SHA256SUMS.txt`. **Run workflow**
-with *draft release* creates a draft release from any branch instead.
+`MDView-<version>-linux-arm64.AppImage` and `SHA256SUMS.txt`. If a job fails,
+fix it on a branch, then move the tag to the fixed commit and push it again
+(delete any partial release on GitHub first):
+
+```sh
+git tag -f v1.0.0 && git push -f origin v1.0.0
+```
+
+Run the tests locally before tagging (see [Tests](#tests)), since nothing runs
+them on ordinary pushes.
 
 The `ubuntu-22.04-arm` runner is free for public repositories; a private
 repository needs a plan with Linux ARM64 hosted runners.

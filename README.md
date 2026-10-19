@@ -1,20 +1,29 @@
 # MDView
 
-A markdown reader for the docs that live in your repositories, built for files
-written by coding agents: plans, specs and architecture notes with large
-Mermaid diagrams.
+**A markdown reader and editor for documents with large, complex Mermaid
+diagrams.**
 
-- **Diagrams of any size stay readable.** Every Mermaid diagram can be zoomed,
-  panned, expanded to fill the window and searched, without hijacking the
-  page's scrolling.
-- **Live reload.** When an agent rewrites a file you have open, the preview
-  updates within a moment and keeps your scroll position and diagram zoom.
-- **Code that looks like your editor.** Code blocks are highlighted with the
-  same grammars and themes as VS Code, including classical **B-Method**.
-- **Uses the whole screen.** Prose stays at a comfortable reading width while
-  diagrams, code and tables stretch to the window.
-- **A light editor when you need it.** Fix a typo or a broken diagram in a
-  split view, and save.
+Most previewers render a Mermaid diagram as a fixed-size image squeezed into
+the text column. Once a flowchart, sequence or architecture diagram grows past
+a few dozen nodes, its labels shrink until they are unreadable, and there is
+no way to zoom in. MDView is built around fixing that:
+
+- **Zoom and pan any diagram.** Pinch or ⌘/Ctrl + scroll zooms around the
+  cursor, drag pans, double-click zooms in, and scrolling the page never gets
+  stuck inside a diagram.
+- **Expand it to the whole window.** The expanded viewer adds full screen, a
+  minimap to see where you are, and search to jump between matching node
+  labels.
+- **Fix it while you read.** Open the source in a split editor next to the
+  preview. A syntax error points to the offending line, and the last good
+  version of the diagram stays visible while you fix it.
+- **Copy or export it.** SVG or PNG, exactly as it looks on screen.
+
+Around the diagrams, it is a full reader for a folder of markdown: a file tree,
+tabs, wide content that uses the whole screen while prose stays readable, code
+highlighted like VS Code (including classical **B-Method**), and live reload
+that keeps your scroll position and zoom when a file changes on disk (handy
+when coding agents write your plans and specs).
 
 MDView runs on macOS 14+ (Apple Silicon and Intel) and on Linux (x86-64 and
 ARM64; Ubuntu 22.04+, Fedora 39+, Debian 12+, Wayland or X11). It works

@@ -1,29 +1,21 @@
 # Builds, tests and packages MDView for every supported platform:
 #   macOS   Apple Silicon (arm64) and Intel (x86_64)  → DMG
 #   Linux   amd64 and arm64                           → AppImage
-# Every push and pull request builds and smoke-tests all four. Pushing a tag vX.Y.Z (matching
-# the version in core/package.json and linux/package.json) also publishes a GitHub release
-# with the four packages and SHA256SUMS.txt. "Run workflow" can create a draft release.
-name: Build and release
+# It runs only when a tag vX.Y.Z is pushed (matching the version in core/package.json and
+# linux/package.json): it builds and smoke-tests all four, then publishes a GitHub release
+# with the four packages and SHA256SUMS.txt.
+name: Release
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      draft-release:
-        description: Create a draft GitHub release from this run
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: "24"
@@ -45,7 +37,7 @@ jobs:
             echo "::error::core/package.json ($core) and linux/package.json ($linux) disagree"
             exit 1
           fi
-          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$core" ]]; then
+          if [[ "${GITHUB_REF#refs/tags/v}" != "$core" ]]; then
             echo "::error::tag ${GITHUB_REF#refs/tags/} does not match version $core"
             exit 1
           fi
@@ -160,7 +152,6 @@ jobs:
   release:
     name: GitHub release
     needs: [version, macos, linux]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.draft-release)
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -196,11 +187,5 @@ jobs:
           **Linux:** \`chmod +x MDView-*.AppImage\` and run it. AppImages need FUSE, which most
           desktops have; without it, run with \`--appimage-extract-and-run\`.
           EOF
-          tag="v$VERSION"
-          flags=(--title "MDView $VERSION" --notes-file notes.md --repo "$GITHUB_REPOSITORY")
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            flags+=(--verify-tag)
-          else
-            flags+=(--draft --target "$GITHUB_SHA")
-          fi
-          gh release create "$tag" dist/* "${flags[@]}"
+          gh release create "v$VERSION" dist/* --verify-tag \
+            --title "MDView $VERSION" --notes-file notes.md --repo "$GITHUB_REPOSITORY"
