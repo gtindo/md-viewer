@@ -413,6 +413,7 @@ function startApp(): void {
       minHeight: 420,
       maximizable: false,
       minimizable: false,
+      autoHideMenuBar: true,
       title: "Settings",
       parent,
     });

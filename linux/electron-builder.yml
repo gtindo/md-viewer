@@ -1,0 +1,42 @@
+# Packages MDView for Linux as a portable AppImage (x64 or arm64, the host's by default).
+#   npm run dist                  # release/MDView-<version>-linux-<arch>.AppImage
+appId: dev.gtindo.mdview
+productName: MDView
+copyright: © 2026 Yvan Guekeng
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - package.json
+asar: true
+asarUnpack:
+  - "**/node_modules/@parcel/watcher-*/**"
+electronLanguages:
+  - en-US
+afterPack: scripts/after-pack.cjs
+# The static type2 AppImage runtime: no libz or libfuse2 needed on the user's system.
+toolsets:
+  appimage: "1.0.3"
+linux:
+  syncDesktopName: true
+  target:
+    - target: AppImage
+  executableName: mdview
+  icon: resources/icons
+  category: Development
+  synopsis: Mermaid-first markdown previewer
+  description: A markdown reader for project docs written by agents, where any Mermaid diagram can be zoomed, panned and read comfortably.
+  mimeTypes:
+    - text/markdown
+    - text/x-markdown
+  desktop:
+    entry:
+      Name: MDView
+      GenericName: Markdown Viewer
+      Comment: Markdown and Mermaid, readable at any size
+      Keywords: markdown;mermaid;diagram;viewer;
+      StartupWMClass: MDView
+appImage:
+  artifactName: MDView-${version}-linux-${arch}.${ext}
+npmRebuild: false

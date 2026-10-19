@@ -1,6 +1,6 @@
 {
   "name": "@mdview/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Shared rendering core: markdown, code, Mermaid viewer and editor. Runs in WKWebView (macOS) and Chromium (Linux).",

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Packages build/MDView.app into build/MDView.dmg (drag-to-Applications layout).
-# Run scripts/build-app.sh first. Notarization steps are below, commented out:
+# Run scripts/build-app.sh first.   scripts/make-dmg.sh [output.dmg] Notarization steps are below, commented out:
 # they need a Developer ID certificate and App Store Connect credentials.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/build/MDView.app"
-DMG="$ROOT/build/MDView.dmg"
+DMG="${1:-$ROOT/build/MDView.dmg}"
 
 if [[ ! -d "$APP" ]]; then
   echo "error: $APP not found; run scripts/build-app.sh first" >&2

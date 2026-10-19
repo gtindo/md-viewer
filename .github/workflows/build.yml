@@ -1,0 +1,204 @@
+# Builds, tests and packages MDView for every supported platform:
+#   macOS   Apple Silicon (arm64) and Intel (x86_64)  → DMG
+#   Linux   amd64 and arm64                           → AppImage
+# Every push and pull request builds and smoke-tests all four. Pushing a tag vX.Y.Z (matching
+# the version in core/package.json and linux/package.json) also publishes a GitHub release
+# with the four packages and SHA256SUMS.txt. "Run workflow" can create a draft release.
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      draft-release:
+        description: Create a draft GitHub release from this run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        name: Check versions
+        run: |
+          core=$(node -p "require('./core/package.json').version")
+          linux=$(node -p "require('./linux/package.json').version")
+          if [ "$core" != "$linux" ]; then
+            echo "::error::core/package.json ($core) and linux/package.json ($linux) disagree"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$core" ]]; then
+            echo "::error::tag ${GITHUB_REF#refs/tags/} does not match version $core"
+            exit 1
+          fi
+          echo "version=$core" >> "$GITHUB_OUTPUT"
+          echo "MDView $core"
+
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: core/package-lock.json
+      - name: Toolchain
+        run: |
+          uname -m
+          swift --version
+      - name: Install core dependencies
+        run: npm ci --prefix core
+      - name: Build MDView.app
+        run: scripts/build-app.sh --arch ${{ matrix.arch }}
+      - name: Smoke test (headless render of the fixtures)
+        run: node scripts/smoke-check.mjs build/MDView.app/Contents/MacOS/MDView
+      - name: Package DMG
+        run: scripts/make-dmg.sh "build/MDView-$VERSION-macos-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MDView-macos-${{ matrix.arch }}
+          path: build/MDView-${{ env.VERSION }}-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux ${{ matrix.label }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built on the oldest supported Ubuntu so the AppImage runs on older glibc too.
+          - arch: x64
+            label: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            label: arm64
+            runner: ubuntu-22.04-arm
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            core/package-lock.json
+            linux/package-lock.json
+      - name: System packages (Electron runtime, virtual display)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xauth libgtk-3-0 libnss3 libgbm1 libasound2 libxss1 libxtst6 libsecret-1-0
+      - name: Install dependencies
+        run: |
+          npm ci --prefix core
+          npm ci --prefix linux
+      - name: Build core and shell
+        run: |
+          npm --prefix core run build
+          npm --prefix linux run build
+      - name: Typecheck and unit tests
+        run: |
+          npm --prefix linux run typecheck
+          npm --prefix linux run test:unit
+      - name: End-to-end tests (real app under Xvfb)
+        run: xvfb-run -a --server-args="-screen 0 1600x1000x24" npm --prefix linux run test:e2e
+      - name: Package AppImage
+        working-directory: linux
+        run: npx electron-builder --linux AppImage --${{ matrix.arch }} --publish never
+      - name: Smoke test the AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          # electron-builder names the x64 AppImage "x86_64"; there is exactly one per job.
+          app=$(ls linux/release/MDView-"$VERSION"-linux-*.AppImage)
+          file "$app"
+          xvfb-run -a node scripts/smoke-check.mjs "$app"
+          mv "$app" "linux/release/MDView-$VERSION-linux-${{ matrix.label }}.AppImage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MDView-linux-${{ matrix.label }}
+          path: linux/release/MDView-${{ env.VERSION }}-linux-${{ matrix.label }}.AppImage
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: GitHub release
+    needs: [version, macos, linux]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.draft-release)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: MDView-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum MDView-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Publish
+        run: |
+          cat > notes.md <<EOF
+          ## Downloads
+
+          | Platform | File |
+          | --- | --- |
+          | macOS, Apple Silicon | \`MDView-$VERSION-macos-arm64.dmg\` |
+          | macOS, Intel | \`MDView-$VERSION-macos-x86_64.dmg\` |
+          | Linux, x86-64 | \`MDView-$VERSION-linux-amd64.AppImage\` |
+          | Linux, ARM64 | \`MDView-$VERSION-linux-arm64.AppImage\` |
+
+          **macOS:** the app is signed ad hoc, not notarized. After dragging it to Applications,
+          open it once with System Settings → Privacy & Security → Open Anyway.
+
+          **Linux:** \`chmod +x MDView-*.AppImage\` and run it. AppImages need FUSE 2
+          (\`libfuse2\` / \`libfuse2t64\` on Ubuntu); without it, run with \`--appimage-extract-and-run\`.
+          EOF
+          tag="v$VERSION"
+          flags=(--title "MDView $VERSION" --notes-file notes.md --repo "$GITHUB_REPOSITORY")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            flags+=(--verify-tag)
+          else
+            flags+=(--draft --target "$GITHUB_SHA")
+          fi
+          gh release create "$tag" dist/* "${flags[@]}"

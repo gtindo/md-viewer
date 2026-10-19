@@ -5,19 +5,26 @@
 #   scripts/build-app.sh            # full build, universal (Apple Silicon + Intel)
 #   scripts/build-app.sh --no-core  # reuse the existing core/dist
 #   scripts/build-app.sh --native   # this Mac's architecture only (faster)
+#   scripts/build-app.sh --arch x86_64   # one architecture (arm64 or x86_64), e.g. for release builds
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/build/MDView.app"
 BUILD_CORE=1
 ARCHS=(--arch arm64 --arch x86_64)
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --no-core) BUILD_CORE=0 ;;
     --native) ARCHS=() ;;
-    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
-    *) echo "unknown option: $arg" >&2; exit 2 ;;
+    --arch)
+      case "${2:-}" in
+        arm64|x86_64) ARCHS=(--arch "$2"); shift ;;
+        *) echo "--arch takes arm64 or x86_64" >&2; exit 2 ;;
+      esac ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
+  shift
 done
 
 if [[ $BUILD_CORE -eq 1 ]]; then
@@ -29,7 +36,7 @@ if [[ ! -f "$ROOT/core/dist/index.html" ]]; then
   exit 1
 fi
 
-echo "==> Building Swift shell (release${ARCHS:+, universal})"
+echo "==> Building Swift shell (release${ARCHS[*]:+, ${ARCHS[*]}})"
 swift build -c release --package-path "$ROOT/macos" ${ARCHS[@]+"${ARCHS[@]}"}
 BIN_DIR="$(swift build -c release --package-path "$ROOT/macos" ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
