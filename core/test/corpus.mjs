@@ -93,7 +93,9 @@ for (const engineName of engines) {
     diagrams += result.count;
     errors += result.errors.length;
     const line = { engine: engineName, path: rel, diagrams: result.count, errors: result.errors, langs: result.langs, pageErrors: [...pageErrors], ms };
-    if (result.errors.length || pageErrors.length) failed++;
+    // Fixtures can declare deliberate errors: <!-- expect-mermaid-errors: N -->
+    const expected = Number(/<!--\s*expect-mermaid-errors:\s*(\d+)\s*-->/.exec(text)?.[1] ?? 0);
+    if (result.errors.length !== expected || pageErrors.length) failed++;
     console.log(JSON.stringify(line));
     if (shots && diagramIndex !== null) {
       await page.evaluate((i) => {

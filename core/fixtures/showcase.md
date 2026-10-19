@@ -111,6 +111,8 @@ erDiagram
   SAMPLE { int series_id FK int ts float value }
 ```
 
+<!-- expect-mermaid-errors: 1 -->
+
 ```mermaid
 flowchart TD
   A[Start] --> B{Broken?
