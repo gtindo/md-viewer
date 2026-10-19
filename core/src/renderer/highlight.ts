@@ -239,8 +239,9 @@ export function highlightDiff(code: string, innerLang: string | null, themes: Co
     line(node, line) {
       const i = line - 1;
       this.addClassToHast(node, lineClass(i));
-      const s = sign(i);
-      if (s) node.children.unshift({ type: "raw", value: s } as never);
+      const k = kinds[i];
+      const ch = k === "add" ? "+" : k === "del" ? "-" : k === "ctx" && raw[i].startsWith(" ") ? " " : "";
+      if (ch) node.children.unshift({ type: "element", tagName: "span", properties: { class: "diff-sign" }, children: [{ type: "text", value: ch }] });
     },
     pre(node) {
       this.addClassToHast(node, "diff");

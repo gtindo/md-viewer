@@ -60,6 +60,8 @@ files.sort();
 if (shots) await mkdir(shots, { recursive: true });
 
 let failed = 0;
+const sizesByEngine = {};
+const tolerance = Number(opt("tolerance", 0.08));
 const summary = {};
 for (const engineName of engines) {
   const engine = engineName === "chromium" ? chromium : webkit;
@@ -86,12 +88,16 @@ for (const engineName of engines) {
         const k = el.dataset.lang ?? "none";
         langs[k] = (langs[k] ?? 0) + 1;
       }
-      return { ...d, langs };
+      const sizes = [...document.querySelectorAll(".mermaid-block .mmd-viewport .mmd-content > svg")].map((svg) => [
+        Number(svg.getAttribute("width")), Number(svg.getAttribute("height")),
+      ]);
+      return { ...d, langs, sizes };
     }, { rel, text });
     const ms = Date.now() - t0;
     totalMs += ms;
     diagrams += result.count;
     errors += result.errors.length;
+    (sizesByEngine[engineName] ??= {})[rel] = result.sizes;
     const line = { engine: engineName, path: rel, diagrams: result.count, errors: result.errors, langs: result.langs, pageErrors: [...pageErrors], ms };
     // Fixtures can declare deliberate errors: <!-- expect-mermaid-errors: N -->
     const expected = Number(/<!--\s*expect-mermaid-errors:\s*(\d+)\s*-->/.exec(text)?.[1] ?? 0);
@@ -114,5 +120,24 @@ for (const engineName of engines) {
   await browser.close();
 }
 server.close();
+// Cross-engine snapshot check: diagram geometry must agree within the tolerance.
+if (sizesByEngine.webkit && sizesByEngine.chromium) {
+  let compared = 0, mismatched = 0;
+  for (const [rel, wk] of Object.entries(sizesByEngine.webkit)) {
+    const cr = sizesByEngine.chromium[rel] ?? [];
+    wk.forEach(([w, h], i) => {
+      if (!cr[i]) return;
+      compared++;
+      const dw = Math.abs(w - cr[i][0]) / Math.max(w, cr[i][0]);
+      const dh = Math.abs(h - cr[i][1]) / Math.max(h, cr[i][1]);
+      if (dw > tolerance || dh > tolerance) {
+        mismatched++;
+        console.log(JSON.stringify({ mismatch: rel, diagram: i, webkit: [w, h], chromium: cr[i] }));
+      }
+    });
+  }
+  summary.crossEngine = { compared, mismatched, tolerance };
+  if (mismatched) failed++;
+}
 console.log("SUMMARY " + JSON.stringify(summary));
 process.exit(failed ? 1 : 0);
