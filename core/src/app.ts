@@ -20,7 +20,6 @@ let pendingState: TabState | null = null;
 let splitRatio = 0.5;
 let hostBanner: Banner | null = null;
 let remoteBanner: Banner | null = null;
-let syncingFromEditor = false;
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 const main = $("#main");
@@ -113,9 +112,7 @@ function onEditorChange(text: string): void {
 
 function onEditorScroll(line: number): void {
   if (mode !== "split" || !settings.scrollSync) return;
-  syncingFromEditor = true;
   view.scrollToFractionalLine(line);
-  requestAnimationFrame(() => (syncingFromEditor = false));
 }
 
 async function setMode(next: Mode): Promise<void> {
@@ -367,14 +364,6 @@ async function command(cmd: string, _arg?: unknown): Promise<unknown> {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && view && !isExpandedOpen()) view.closeFind();
 });
-
-previewPane.addEventListener(
-  "scroll",
-  () => {
-    if (syncingFromEditor) return;
-  },
-  { passive: true },
-);
 
 window.mdview = { receive, version: BRIDGE_VERSION };
 applySettings();

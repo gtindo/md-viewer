@@ -493,10 +493,15 @@ export class DiagramManager {
       const r = b.el.getBoundingClientRect();
       return r.bottom > container.top - container.height && r.top < container.bottom + container.height;
     };
-    const order = [...this.blocks].sort((a, b) => Number(visible(b)) - Number(visible(a)));
-    for (const b of order) {
+    const io = this.observer();
+    for (const b of this.blocks) {
       b.result = null;
       if (visible(b)) void b.render();
+      else {
+        // Re-observing fires a fresh callback, so off-screen blocks re-render lazily.
+        io.unobserve(b.el);
+        io.observe(b.el);
+      }
     }
   }
 
