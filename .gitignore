@@ -5,3 +5,5 @@ build/
 *.dmg
 .DS_Store
 .swiftpm/
+linux/dist/
+linux/release/
