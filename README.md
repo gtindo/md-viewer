@@ -1,197 +1,231 @@
 # MDView
 
-A Mermaid-first markdown previewer for project docs written by agents. Any
-Mermaid diagram, however large, can be zoomed, panned and read comfortably;
-code blocks are highlighted with VS Code grammars, including **B-Method**.
+A markdown reader for the docs that live in your repositories, built for files
+written by coding agents: plans, specs and architecture notes with large
+Mermaid diagrams.
 
-The product spec is in [docs/SPEC.md](docs/SPEC.md). This repository holds the
-shared rendering core, the native macOS shell and the Linux (Electron) shell.
-Current version: **1.0.0**.
+- **Diagrams of any size stay readable.** Every Mermaid diagram can be zoomed,
+  panned, expanded to fill the window and searched, without hijacking the
+  page's scrolling.
+- **Live reload.** When an agent rewrites a file you have open, the preview
+  updates within a moment and keeps your scroll position and diagram zoom.
+- **Code that looks like your editor.** Code blocks are highlighted with the
+  same grammars and themes as VS Code, including classical **B-Method**.
+- **Uses the whole screen.** Prose stays at a comfortable reading width while
+  diagrams, code and tables stretch to the window.
+- **A light editor when you need it.** Fix a typo or a broken diagram in a
+  split view, and save.
 
-```
-core/     TypeScript rendering core (markdown-it, Shiki, Mermaid viewer, CodeMirror editor)
-macos/    Swift/SwiftUI shell around WKWebView (Swift Package)
-linux/    Electron shell around the same core, packaged as an AppImage
-scripts/  build-app.sh, make-dmg.sh, make-icon.swift, smoke-check.mjs
-.github/  CI: build, test and release for macOS (arm64, x86_64) and Linux (amd64, arm64)
-docs/     product spec
-```
+MDView runs on macOS 14+ (Apple Silicon and Intel) and on Linux (x86-64 and
+ARM64; Ubuntu 22.04+, Fedora 39+, Debian 12+, Wayland or X11). It works
+entirely offline and collects nothing.
 
-## Build and run (macOS 14+)
+## Install
 
-Requirements: Xcode command-line tools (Swift 6), Node 20+.
+Download the latest version from the [Releases page](../../releases).
 
-```sh
-npm --prefix core install
-scripts/build-app.sh          # builds core/dist, the Swift shell, and build/MDView.app
-open build/MDView.app --args ~/Projects/observy-rs
-```
+| Platform | File |
+| --- | --- |
+| macOS, Apple Silicon | `MDView-<version>-macos-arm64.dmg` |
+| macOS, Intel | `MDView-<version>-macos-x86_64.dmg` |
+| Linux, x86-64 | `MDView-<version>-linux-amd64.AppImage` |
+| Linux, ARM64 | `MDView-<version>-linux-arm64.AppImage` |
 
-Drop a folder (or a `.md` file) on the window or the Dock icon to open it as a
-workspace. `scripts/make-dmg.sh` packages `build/MDView.dmg`, a universal build
-(Apple Silicon and Intel, macOS 14+) with a drag-to-Applications layout.
-`scripts/build-app.sh --arch arm64` (or `x86_64`) builds a single architecture,
-and `scripts/make-dmg.sh <output.dmg>` names the image, as the release pipeline does.
+Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
-### Sharing the DMG
+### macOS
 
-The app is signed ad hoc, not with a Developer ID, so macOS blocks it on first
-launch on another Mac ("Apple could not verify…"). After dragging it to
-Applications, the recipient opens it once with **System Settings → Privacy &
-Security → Open Anyway**. Alternatively, they can run
-`xattr -dr com.apple.quarantine /Applications/MDView.app`. Developer ID signing
-and notarization remove this step; they are sketched in `scripts/make-dmg.sh`.
+Open the DMG and drag **MDView** to **Applications**.
 
-The icon is drawn by `scripts/make-icon.swift`. Run
-`swift scripts/make-icon.swift --preview icon.png` to look at it, including the
-small sizes, without rebuilding.
-
-## Linux (Electron, AppImage)
-
-Targets Ubuntu 22.04+, Fedora 39+ and Debian 12+, on x86-64 and ARM64, under
-Wayland or X11. Requirements to build: Node 22+ (24 recommended), on Linux.
+The app is not notarized by Apple, so the first launch is blocked with "Apple
+could not verify…". Open it once from **System Settings → Privacy & Security →
+Open Anyway**; later launches work normally. Alternatively, run:
 
 ```sh
-npm --prefix core ci
-npm --prefix linux ci
-npm --prefix linux run dist     # linux/release/MDView-1.0.0-linux-<arch>.AppImage (host architecture)
-chmod +x linux/release/MDView-*.AppImage
-linux/release/MDView-1.0.0-linux-x86_64.AppImage ~/Projects/observy-rs
+xattr -dr com.apple.quarantine /Applications/MDView.app
 ```
 
-The AppImage is portable: it uses AppImage's static runtime, so it needs no
-zlib or libfuse2 on the system (only FUSE, or `--appimage-extract-and-run`
-where FUSE is unavailable, e.g. in containers). During development,
-`npm --prefix linux start` builds and runs the app from source.
+### Linux
 
-How the shell is put together:
-
-- The **main process** (`linux/src/main`) owns windows, the menu bar, dialogs, the
-  workspace scan (with `.gitignore` support), the recursive `@parcel/watcher`
-  (inotify) watcher, atomic writes, the `mdview://` scheme (one session per
-  workspace window, so `mdview://ws/` never serves files outside that workspace),
-  and settings and session state in `~/.config/MDView/` (`settings.json`,
-  `session.json`).
-- The **shell UI** (`linux/src/shell`, plain TypeScript) draws the sidebar, tab
-  bar, toolbar, quick open and the Welcome and Settings windows. Tabs are views
-  inside the window's one renderer: each open document is the unchanged core in
-  an iframe, at most 8 kept alive per window.
-- The **preload** exposes the core's `HostBridge` (`window.mdviewHost`) in core
-  frames and a narrow IPC surface in the shell frame. Context isolation,
-  the renderer sandbox and no Node integration are on; navigation and new windows
-  are blocked; Electron fuses disable `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` and
-  `--inspect`, and the app only loads from its asar archive.
-- Inside an AppImage, Chromium's sandbox needs unprivileged user namespaces. The
-  launcher keeps the sandbox on where the kernel allows them and passes
-  `--no-sandbox` where it does not (Ubuntu 23.10+ AppArmor policy, root).
-- JetBrains Mono is bundled for code; prose uses the desktop's UI font. Light and
-  dark follow the desktop setting.
-
-Linux shortcuts follow the spec: Ctrl in place of ⌘, Ctrl+B toggles the sidebar
-(inside the editor it makes text bold), Alt+←/→ go back and forward, F11 is full
-screen, Ctrl+Alt+←/→ move between diagrams in the expanded viewer, Ctrl+H
-replaces, F3 / Shift+F3 find next and previous. Diagram panning uses plain
-click-drag, since many window managers take Alt+drag; Ctrl+scroll and the
-toolbar zoom wherever pinch is unavailable (X11).
-
-Not in 1.0.0 (from the spec's M7): `.deb` / `.rpm` packages, AppImage
-auto-update, and spell checking (Electron would download dictionaries).
-The embedded ASAR integrity fuse is not enabled: Electron documents it for macOS and Windows builds.
-
-Headless checks work as on macOS: `mdview --render-check <folder>` and
-`mdview --screenshot <file.md> <out.png>`.
-
-### Tests
+The AppImage is a single portable file; nothing is installed system-wide.
 
 ```sh
-npm --prefix linux test          # typecheck, unit tests, end-to-end tests (Playwright drives the real app)
-xvfb-run -a npm --prefix linux run test:e2e   # on a Linux machine without a display
-node scripts/smoke-check.mjs <app binary or AppImage>   # packaged build renders the fixtures
+chmod +x MDView-*-linux-*.AppImage
+./MDView-1.0.0-linux-amd64.AppImage
 ```
 
-The end-to-end suite also runs on macOS against the development build.
-To build and test on Linux from a Mac, an Incus (or any) Ubuntu 22.04
-container with Node 24, `xvfb` and the GTK/NSS runtime libraries is enough;
-copy the tree without `node_modules` and run the same commands.
+AppImages need FUSE, which most desktops already have. Where it is missing
+(for example in containers), run the file with `--appimage-extract-and-run`.
+To get MDView in your application menu, use an AppImage manager such as
+[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or AppImageLauncher.
 
-## Releases (GitHub Actions)
+## Getting started
 
-`.github/workflows/build.yml` runs on every push to `main` and every pull
-request: it builds the macOS app for Apple Silicon (`macos-15`) and Intel
-(`macos-15-intel`), smoke-tests each with `--render-check`, and packages a DMG;
-on Linux it builds on `ubuntu-22.04` (amd64) and `ubuntu-22.04-arm` (arm64) for
-older-glibc compatibility, runs the typecheck, unit and end-to-end tests under
-Xvfb, packages the AppImage and smoke-tests it. The four packages are kept as
-workflow artifacts.
-
-To publish a release, keep `core/package.json` and `linux/package.json` at the
-same version, then push a matching tag:
+Open a **folder** (a repository, or a docs directory) as a workspace: use
+**Open Folder…** on the welcome screen, drag the folder onto the window (or the
+Dock icon on macOS), or pass it on the command line:
 
 ```sh
-git tag v1.0.0 && git push origin v1.0.0
+open -a MDView ~/Projects/my-repo                 # macOS
+./MDView-1.0.0-linux-amd64.AppImage ~/Projects/my-repo   # Linux
 ```
 
-The release job attaches `MDView-1.0.0-macos-arm64.dmg`,
-`MDView-1.0.0-macos-x86_64.dmg`, `MDView-1.0.0-linux-amd64.AppImage`,
-`MDView-1.0.0-linux-arm64.AppImage` and `SHA256SUMS.txt`. "Run workflow" with
-*draft release* creates a draft from any branch instead. The `ubuntu-22.04-arm`
-runner is free for public repositories; a private repository needs a plan
-with Linux ARM64 hosted runners.
+Opening a single `.md` file opens its folder as the workspace, with that file
+in a tab. Each workspace gets its own window, and MDView reopens your
+workspaces, tabs and scroll positions the next time it starts.
+
+### The file tree
+
+The sidebar shows the folder's markdown files (`.md`, `.markdown`, `.mdx`) and
+the folders that contain them, and updates as files are created or deleted.
+
+- The menu at the bottom of the sidebar switches between **Markdown Only**,
+  **Markdown + All Folders** and **All Files**.
+- Type in the **Filter** field to find files by name.
+- A small dot marks files changed in the last five minutes, so you can see what
+  an agent just touched.
+- `.git`, `node_modules` and anything in the workspace's `.gitignore` are
+  hidden (you can change this, and add your own patterns, in Settings).
+- Right-click for New File, New Folder, Rename, Duplicate, Move to Trash, Copy
+  Path and more.
+
+### Tabs
+
+A **single click** opens a file in a *preview* tab (title in italics), which
+the next single click reuses. **Double-click** a file, or start editing it, to
+keep its tab open. Drag tabs to reorder them; right-click for Close Others and
+Close to the Right. Links between markdown files open in tabs too, and
+**Back** / **Forward** move through the files you followed.
+
+### Preview, Split and Edit
+
+Each tab can show the rendered document (**Preview**), the editor next to the
+preview (**Split**), or the editor alone (**Edit**). Switch with the buttons in
+the toolbar, ⌘E / Ctrl+E (Preview ↔ Edit), or ⌘⇧P / Ctrl+Shift+P (cycle).
+
+The editor highlights markdown and the code inside fenced blocks, continues
+lists when you press Enter, and has ⌘B / ⌘I / ⌘K (Ctrl on Linux) for bold,
+italic and links. Optional line numbers and vim keybindings are in Settings.
+
+Save with ⌘S / Ctrl+S. MDView keeps each file's line endings, byte-order mark
+and final newline as they were. If a file changes on disk while you have
+unsaved edits, a banner lets you **Keep Mine**, **Load Theirs** or **Compare**
+the two side by side; nothing is overwritten silently. Autosave (on focus loss,
+or after two seconds idle) can be turned on in Settings.
 
 ## Reading diagrams
 
-| Input | Inline diagram | Expanded viewer |
+Scrolling a document never gets stuck inside a diagram: a diagram only takes
+over the scroll wheel once you have zoomed into it.
+
+| Action | macOS | Linux |
 | --- | --- | --- |
-| Two-finger scroll / wheel | scrolls the page | pans |
-| Pinch, or ⌘ + scroll | zooms around the cursor | zooms around the cursor |
-| ⌥ + scroll, or drag | pans | pans |
-| Double click / ⌥ double click | zoom 2× / fit | zoom 2× / fit |
-| ⇧ double click, ⌘↩, Expand button | opens the expanded viewer | — |
-| Keys (after clicking) | + − 0 1, arrows, Esc | same, M minimap, ⌘F find, ⌘⌥←/→ next diagram |
+| Zoom around the cursor | pinch, or ⌘ + scroll | pinch (Wayland), or Ctrl + scroll |
+| Pan | drag, or ⌥ + scroll | drag, or Alt + scroll |
+| Zoom in 2× / fit | double-click / ⌥ double-click | double-click / Alt double-click |
+| Open the expanded viewer | Expand button, ⇧ double-click, or ⌘↩ | Expand button, Shift double-click, or Ctrl+Enter |
+| Keys (after clicking a diagram) | + − to zoom, 0 fit, 1 actual size, arrows to pan, Esc | same |
 
-A diagram becomes "engaged" after a pinch; two-finger scroll then pans it until
-the pointer leaves or Esc is pressed. Syntax errors show an error card with the
-offending line, and the last good render stays visible while you fix it.
+Every diagram has a toolbar (zoom out, zoom level, zoom in, fit, expand) and a
+**More** menu to copy or export it as SVG or PNG, or to copy and view its
+source. Drag the handle under a diagram to make its viewport taller.
 
-## Diagram style
+The **expanded viewer** fills the document area and starts fitted to the
+window. Press **M** to toggle the minimap, ⌘F / Ctrl+F to find text in the
+diagram's labels, ⌘⌥← → / Ctrl+Alt+← → to move to the previous or next diagram,
+⌃⌘F / F11 for full screen, and Esc to close.
 
-Diagrams use MDView's own palette by default (Settings → Diagrams → Diagram
-style), with light and dark variants that follow the app's appearance:
+If a diagram has a syntax error, MDView shows Mermaid's message with the
+offending line highlighted and keeps the last good version visible while you
+fix it.
 
-- Soft tinted fills, thin borders a shade darker, and rounded corners.
-- Colour carries meaning: decisions are amber, start and end steps green,
-  databases violet. Each subgraph gets its own pale tint, and its nodes share it.
-- Sequence actors, classes and ER entities each get their own colour.
+### Diagram style
 
-Your own `style`, `classDef` and `linkStyle` statements still take precedence.
-The styling is embedded in the SVG, so copied and exported diagrams look the
-same. Mermaid's built-in themes remain available in the same menu.
+Diagrams use MDView's own palette by default, with light and dark variants
+that follow your system appearance: soft tinted fills, rounded corners, and
+colours that carry meaning (decisions are amber, start and end steps green,
+databases violet; each subgraph gets its own tint). Your own `style`,
+`classDef` and `linkStyle` statements still win. Mermaid's built-in themes are
+available under **Settings → Diagrams → Diagram style**. Copied and exported
+diagrams look exactly as they do on screen.
 
 ## B-Method
 
-Fences tagged `b`, `bmethod`, `b-method`, `classicalb`, `mch`, `ref`, `imp` or
-`prob` are highlighted as classical B. Untagged fences are detected
-automatically: a block with strong B signals (clauses such as `MACHINE` or
-`INVARIANT`, `:=`, `<--`, `|->`, quantifiers, `x : SET` typing, ProB traces)
-is highlighted as B, and once a document is known to be about B, looser
-snippets and `diff` blocks are highlighted as B too (`diff-b` forces it). The
-editor highlights B fences with a matching CodeMirror mode.
+Code fences tagged `b`, `bmethod`, `b-method`, `classicalb`, `mch`, `ref`, `imp`
+or `prob` are highlighted as classical B. Untagged fences are detected too: a
+block with clear B signals (`MACHINE`, `INVARIANT`, `:=`, `<--`, `|->`,
+quantifiers, ProB traces) is highlighted as B, and once a document is clearly
+about B, smaller snippets and `diff` blocks follow (`diff-b` forces it).
 
-## Core development
+## Keyboard shortcuts
 
-```sh
-cd core
-npm run build            # dist/: renderer.js + lazy chunks, app.css, index.html
-npm run watch
-npm test                 # typecheck, interaction tests (WebKit + Chromium), fixture corpus
-node test/corpus.mjs --root ../../observy-rs --engine webkit,chromium
-node test/corpus.mjs --root ../../formal-method-workbench --shots /tmp/shots
-```
+All shortcuts are also in the menus.
 
-The corpus test renders every markdown file under a folder headlessly, renders
-all diagrams, reports Mermaid and page errors, and compares diagram geometry
-between WebKit and Chromium. Fixtures can declare deliberate failures with
-`<!-- expect-mermaid-errors: N -->`.
+| Action | macOS | Linux |
+| --- | --- | --- |
+| Open folder / file | ⌘O / ⌘⇧O | Ctrl+O / Ctrl+Shift+O |
+| Quick open (find a file by name) | ⌘P | Ctrl+P |
+| New window | ⌘N | Ctrl+N |
+| Toggle sidebar | ⌃⌘S | Ctrl+B (outside the editor) |
+| Reveal the current file in the tree | ⌘⇧J | Ctrl+Shift+J |
+| Preview ↔ Edit / cycle modes | ⌘E / ⌘⇧P | Ctrl+E / Ctrl+Shift+P |
+| Save / Save As | ⌘S / ⌘⇧S | Ctrl+S / Ctrl+Shift+S |
+| Close tab / reopen closed tab | ⌘W / ⌘⇧T | Ctrl+W / Ctrl+Shift+T |
+| Next / previous tab | ⌃Tab / ⌃⇧Tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Go to tab 1–8 / last tab | ⌘1…⌘8 / ⌘9 | Ctrl+1…Ctrl+8 / Ctrl+9 |
+| Back / forward | ⌘[ / ⌘] | Alt+← / Alt+→ |
+| Find / next / previous | ⌘F / ⌘G / ⌘⇧G | Ctrl+F / F3 / Shift+F3 |
+| Replace (editor) | ⌘⌥F | Ctrl+H |
+| Bold / italic / link (editor) | ⌘B / ⌘I / ⌘K | Ctrl+B / Ctrl+I / Ctrl+K |
+| Text size bigger / smaller / reset | ⌘+ / ⌘− / ⌘0 | Ctrl++ / Ctrl+− / Ctrl+0 |
+| Expand the focused diagram | ⌘↩ | Ctrl+Enter |
+| Next / previous diagram (expanded) | ⌘⌥→ / ⌘⌥← | Ctrl+Alt+→ / Ctrl+Alt+← |
+| Full screen | ⌃⌘F | F11 |
+| Settings | ⌘, | Ctrl+, |
+| Quit | ⌘Q | Ctrl+Q |
 
-The core never touches the file system. Shells talk to it only through the
-`HostBridge` messages in [core/src/bridge.ts](core/src/bridge.ts).
+## Settings
+
+Open Settings with ⌘, / Ctrl+,.
+
+- **General:** reopen workspaces on launch, the default mode for opened files,
+  autosave, whether to respect `.gitignore`, and extra ignore patterns
+  (gitignore syntax, one per line, e.g. `dist/` or `**/*.generated.md`).
+- **Appearance:** content width (Readable, Wide, Full; also in the toolbar),
+  base font size, prose font, light and dark code themes, line numbers in code
+  blocks and in the editor, vim keybindings, scroll sync in Split mode.
+- **Diagrams:** the inline height limit, whether small diagrams show at actual
+  size or fit the width, the minimap, and the diagram style.
+
+MDView stores its settings and session (open workspaces, tabs, recent folders)
+in `~/Library/Application Support/MDView/` and the app's preferences on macOS,
+and in `~/.config/MDView/` on Linux. Deleting them resets the app.
+
+## Privacy
+
+MDView never connects to the network. Documents are rendered from local files
+only; images from the web are blocked until you click **Load Remote Images**
+for that document. Raw HTML in markdown is sanitised, and Mermaid runs in
+strict mode. There is no telemetry and no account.
+
+## Troubleshooting
+
+- **macOS says the app can't be verified:** see [macOS](#macos) above.
+- **The AppImage does nothing when double-clicked:** make it executable
+  (`chmod +x`), or run it from a terminal to see the error.
+- **"FUSE" errors on Linux:** install FUSE (`fuse3` on Ubuntu/Debian/Fedora),
+  or run with `--appimage-extract-and-run`.
+- **Pinch-zoom doesn't work on Linux under X11:** this is a limitation of X11;
+  use Ctrl + scroll, double-click, or the diagram toolbar.
+- **A folder doesn't appear in the tree:** it contains no markdown, or it is
+  ignored by `.gitignore`. Switch the sidebar to **All Files** or turn off
+  **Respect .gitignore** in Settings.
+
+To report a problem, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MDView is released under the [MIT License](LICENSE). It is a personal tool
+shared as is; see [CONTRIBUTING.md](CONTRIBUTING.md) for how to report bugs or
+build on it. If you want to build it from source, see
+[DEVELOPMENT.md](DEVELOPMENT.md).

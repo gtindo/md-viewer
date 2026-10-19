@@ -5,7 +5,7 @@
   "private": true,
   "description": "A Mermaid-first markdown previewer for project docs written by agents.",
   "author": "Yvan Guekeng <yvan.guekeng@gmail.com>",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "homepage": "https://github.com/gtindo/md-viewer",
   "main": "dist/main.js",
   "desktopName": "mdview.desktop",

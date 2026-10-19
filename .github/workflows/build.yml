@@ -191,8 +191,8 @@ jobs:
           **macOS:** the app is signed ad hoc, not notarized. After dragging it to Applications,
           open it once with System Settings → Privacy & Security → Open Anyway.
 
-          **Linux:** \`chmod +x MDView-*.AppImage\` and run it. AppImages need FUSE 2
-          (\`libfuse2\` / \`libfuse2t64\` on Ubuntu); without it, run with \`--appimage-extract-and-run\`.
+          **Linux:** \`chmod +x MDView-*.AppImage\` and run it. AppImages need FUSE, which most
+          desktops have; without it, run with \`--appimage-extract-and-run\`.
           EOF
           tag="v$VERSION"
           flags=(--title "MDView $VERSION" --notes-file notes.md --repo "$GITHUB_REPOSITORY")
