@@ -159,6 +159,8 @@ const strongSignals: RegExp[] = [
   /<\+|<<\||\|>>/,
   /\+->|>->|-->>|<->/,
   /\bscope_[A-Z]/,
+  // ProB traces and counter-examples.
+  /^\s*\d+(?:\s*-\s*\d+)?:\s*(?:SETUP_CONSTANTS|INITIALISATION)\b/m,
   /∀|∃|∈|∉|⊆|↦|⇒|ℕ/,
 ];
 

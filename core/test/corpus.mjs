@@ -81,13 +81,18 @@ for (const engineName of engines) {
     const result = await page.evaluate(async ({ rel, text }) => {
       await window.mdview.receive({ type: "render", payload: { path: rel, text, reason: "open" } });
       const d = await window.mdview.receive({ type: "renderAllDiagrams" });
-      return d;
+      const langs = {};
+      for (const el of document.querySelectorAll(".code-block")) {
+        const k = el.dataset.lang ?? "none";
+        langs[k] = (langs[k] ?? 0) + 1;
+      }
+      return { ...d, langs };
     }, { rel, text });
     const ms = Date.now() - t0;
     totalMs += ms;
     diagrams += result.count;
     errors += result.errors.length;
-    const line = { engine: engineName, path: rel, diagrams: result.count, errors: result.errors, pageErrors: [...pageErrors], ms };
+    const line = { engine: engineName, path: rel, diagrams: result.count, errors: result.errors, langs: result.langs, pageErrors: [...pageErrors], ms };
     if (result.errors.length || pageErrors.length) failed++;
     console.log(JSON.stringify(line));
     if (shots && diagramIndex !== null) {
