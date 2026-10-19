@@ -18,12 +18,23 @@ fi
 # codesign --force --deep --options runtime --timestamp -s "$IDENTITY" "$APP"
 
 STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
+trap 'rm -rf "$STAGE" "$STAGE.rw.dmg"' EXIT
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 
-rm -f "$DMG"
-hdiutil create -volname "MDView" -srcfolder "$STAGE" -ov -format UDZO -fs HFS+ "$DMG" >/dev/null
+# The mounted volume shows the app icon: .VolumeIcon.icns plus the volume's custom-icon flag,
+# which has to be set on a mounted read-write image before compressing it.
+cp "$APP/Contents/Resources/AppIcon.icns" "$STAGE/.VolumeIcon.icns"
+RW="$STAGE.rw.dmg"
+rm -f "$DMG" "$RW"
+hdiutil create -volname "MDView" -srcfolder "$STAGE" -ov -format UDRW -fs HFS+ "$RW" >/dev/null
+if command -v SetFile >/dev/null; then
+  MOUNT="$(hdiutil attach -nobrowse -noautoopen "$RW" | awk -F'\t' '/\/Volumes\//{print $NF}')"
+  SetFile -a C "$MOUNT"
+  hdiutil detach -quiet "$MOUNT"
+fi
+hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
+rm -f "$RW"
 echo "Built $DMG"
 
 # --- Notarization (requires credentials; not run by this script) -------------

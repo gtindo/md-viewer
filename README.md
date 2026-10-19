@@ -26,7 +26,21 @@ open build/MDView.app --args ~/Projects/observy-rs
 ```
 
 Drop a folder (or a `.md` file) on the window or the Dock icon to open it as a
-workspace. `scripts/make-dmg.sh` packages `build/MDView.dmg`.
+workspace. `scripts/make-dmg.sh` packages `build/MDView.dmg`, a universal build
+(Apple Silicon and Intel, macOS 14+) with a drag-to-Applications layout.
+
+### Sharing the DMG
+
+The app is signed ad hoc, not with a Developer ID, so macOS blocks it on first
+launch on another Mac ("Apple could not verify…"). After dragging it to
+Applications, the recipient opens it once with **System Settings → Privacy &
+Security → Open Anyway**. Alternatively, they can run
+`xattr -dr com.apple.quarantine /Applications/MDView.app`. Developer ID signing
+and notarization remove this step; they are sketched in `scripts/make-dmg.sh`.
+
+The icon is drawn by `scripts/make-icon.swift`. Run
+`swift scripts/make-icon.swift --preview icon.png` to look at it, including the
+small sizes, without rebuilding.
 
 ## Reading diagrams
 

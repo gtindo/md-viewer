@@ -2,17 +2,20 @@
 # Builds build/MDView.app: the shared core (npm), the Swift shell (SwiftPM, release),
 # the bundle layout and an ad-hoc signature.
 #
-#   scripts/build-app.sh            # full build
+#   scripts/build-app.sh            # full build, universal (Apple Silicon + Intel)
 #   scripts/build-app.sh --no-core  # reuse the existing core/dist
+#   scripts/build-app.sh --native   # this Mac's architecture only (faster)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/build/MDView.app"
 BUILD_CORE=1
+ARCHS=(--arch arm64 --arch x86_64)
 for arg in "$@"; do
   case "$arg" in
     --no-core) BUILD_CORE=0 ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    --native) ARCHS=() ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -26,9 +29,9 @@ if [[ ! -f "$ROOT/core/dist/index.html" ]]; then
   exit 1
 fi
 
-echo "==> Building Swift shell (release)"
-swift build -c release --package-path "$ROOT/macos"
-BIN_DIR="$(swift build -c release --package-path "$ROOT/macos" --show-bin-path)"
+echo "==> Building Swift shell (release${ARCHS:+, universal})"
+swift build -c release --package-path "$ROOT/macos" ${ARCHS[@]+"${ARCHS[@]}"}
+BIN_DIR="$(swift build -c release --package-path "$ROOT/macos" ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
 ICON="$ROOT/macos/Resources/AppIcon.icns"
 if [[ ! -f "$ICON" ]]; then
