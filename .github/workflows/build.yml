@@ -147,7 +147,9 @@ jobs:
           app=$(ls linux/release/MDView-"$VERSION"-linux-*.AppImage)
           file "$app"
           xvfb-run -a node scripts/smoke-check.mjs "$app"
-          mv "$app" "linux/release/MDView-$VERSION-linux-${{ matrix.label }}.AppImage"
+          # Release name uses amd64/arm64; only the x64 build needs renaming.
+          target="linux/release/MDView-$VERSION-linux-${{ matrix.label }}.AppImage"
+          if [ "$app" != "$target" ]; then mv "$app" "$target"; fi
       - uses: actions/upload-artifact@v4
         with:
           name: MDView-linux-${{ matrix.label }}
