@@ -68,6 +68,7 @@ enum DebugSnapshot {
 ///   open <path>               open a file or folder as if dropped on the Dock icon
 ///   key <chars> [cmd,shift,option,control]   deliver a key-down through NSApp.sendEvent
 ///   dump                      log workspace and tab state as JSON
+///   click/move/drag/scroll/pinch/press/type   synthetic input, see DebugInput
 ///   wait <seconds>
 @MainActor
 enum DebugCommands {
@@ -89,6 +90,7 @@ enum DebugCommands {
     }
 
     private static var selectedRoot: String?
+    private static var inputWindowTitle: String?
 
     static var activeWindow: NSWindow? {
         let windows = NSApp.orderedWindows.filter { $0.windowController is WorkspaceWindowController }
@@ -171,7 +173,7 @@ enum DebugCommands {
                 let tabs = store.tabs.map { t in
                     "{\"path\":\"\(t.path)\",\"pinned\":\(t.isPinned),\"mode\":\"\(t.mode.rawValue)\",\"dirty\":\(t.isDirty),\"deleted\":\(t.isDeleted),\"banner\":\"\(t.banner?.kind.rawValue ?? "")\",\"back\":\(t.back.count),\"fwd\":\(t.forward.count),\"scrollY\":\(t.state.scrollY ?? -1),\"live\":\(WebViewPool.shared.live(t.id) != nil)}"
                 }
-                out("dump active-app=\(NSApp.isActive) key=\(NSApp.keyWindow?.title ?? "-") fr=\(NSApp.keyWindow.map { String(describing: type(of: $0.firstResponder as Any)) } ?? "-") root=\(store.root.path) active=\(store.activeTab?.path ?? "-") filter=\(store.filterMode.rawValue) expanded=\(store.expanded.sorted()) tabs=[\(tabs.joined(separator: ","))] pool=\(WebViewPool.shared.all.count) font=\(AppSettings.shared.prefs.core.fontSize) width=\(AppSettings.shared.prefs.core.width.rawValue)")
+                out("dump active-app=\(NSApp.isActive) key=\(NSApp.keyWindow?.title ?? "-") fr=\(NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "-") root=\(store.root.path) active=\(store.activeTab?.path ?? "-") filter=\(store.filterMode.rawValue) expanded=\(store.expanded.sorted()) tabs=[\(tabs.joined(separator: ","))] pool=\(WebViewPool.shared.all.count) font=\(AppSettings.shared.prefs.core.fontSize) width=\(AppSettings.shared.prefs.core.width.rawValue)")
             case "tree":
                 // tree <markdown|markdownAndFolders|allFiles> | tree query <text> | tree reveal
                 guard let store = activeStore else { continue }
@@ -199,6 +201,33 @@ enum DebugCommands {
                 let parts = arg.split(separator: " ").map(String.init)
                 guard let p = parts.first else { continue }
                 await DebugSnapshot.capture(to: URL(fileURLWithPath: p), includeWeb: !parts.contains("noweb"))
+            case "layerborders":
+                // WebKit SPI: outline composited layers (with repaint counters) in the active tab.
+                guard let store = activeStore, let tab = store.activeTab, let c = WebViewPool.shared.live(tab.id) else { continue }
+                let prefs = c.webView.configuration.preferences
+                for sel in ["_setCompositingBordersVisible:", "_setCompositingRepaintCountersVisible:"] where prefs.responds(to: Selector((sel))) {
+                    prefs.perform(Selector((sel)), with: arg == "off" ? nil : NSNumber(value: true))
+                }
+                out("layerborders \(arg)")
+            case "layertree":
+                // WebKit SPI: write the Core Animation layer tree (bounds, transforms, contents scale).
+                guard let store = activeStore, let tab = store.activeTab, let c = WebViewPool.shared.live(tab.id) else { continue }
+                let sel = Selector(("_caLayerTreeAsText"))
+                guard c.webView.responds(to: sel), let text = c.webView.perform(sel)?.takeUnretainedValue() as? String else { out("layertree: unavailable"); continue }
+                try? text.write(toFile: arg, atomically: true, encoding: .utf8)
+                out("layertree \(arg) (\(text.count) chars)")
+            case "front":
+                NSApp.activate(ignoringOtherApps: true)
+                activeWindow?.makeKeyAndOrderFront(nil)
+            case "inwin":
+                // inwin <window title> sends later input to that window; "inwin" alone resets.
+                inputWindowTitle = arg.isEmpty ? nil : arg
+                out("input window \(arg.isEmpty ? "-" : arg)")
+            case "click", "move", "drag", "scroll", "pinch", "press", "type":
+                let target = inputWindowTitle.flatMap { t in NSApp.windows.first { $0.isVisible && $0.title == t } }
+                guard let w = target ?? activeWindow else { out("\(cmd): no window"); continue }
+                await DebugInput.run(cmd, arg, in: w)
+                out("\(cmd) \(arg)")
             case "wait":
                 try? await Task.sleep(for: .seconds(Double(arg) ?? 1))
             default:

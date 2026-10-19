@@ -104,6 +104,8 @@ final class WebHostView: NSView {
             web.topAnchor.constraint(equalTo: topAnchor),
             web.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        if hadFocus { window?.makeFirstResponder(web) }
+        // Also take focus when nothing has it, e.g. a tree ↩ that opened a new tab before its
+        // web view was in the window.
+        if hadFocus || window?.firstResponder === window { window?.makeFirstResponder(web) }
     }
 }

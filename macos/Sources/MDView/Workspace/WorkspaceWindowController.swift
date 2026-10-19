@@ -383,6 +383,29 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate, NST
     func windowDidMove(_ notification: Notification) { SessionManager.shared.scheduleSave() }
     func windowDidResignKey(_ notification: Notification) { store.autosaveAll() }
 
+    private var didInitialFocus = false
+
+    /// On first show AppKit focuses the first key view, the sidebar's filter field, so typing,
+    /// space and the arrow keys would not reach the document. Start in the document instead,
+    /// or in the tree when no file is open.
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard !didInitialFocus, let window else { return }
+        didInitialFocus = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let tab = self.store.activeTab, let web = WebViewPool.shared.live(tab.id)?.webView else {
+                if let tree = window.contentView.flatMap(Self.firstOutline) { window.makeFirstResponder(tree) }
+                return
+            }
+            window.makeFirstResponder(web)
+        }
+    }
+
+    private static func firstOutline(in view: NSView) -> NSOutlineView? {
+        if let o = view as? NSOutlineView { return o }
+        for v in view.subviews { if let o = firstOutline(in: v) { return o } }
+        return nil
+    }
+
     func windowDidEnterFullScreen(_ notification: Notification) {
         store.send(.diagramFullScreenChanged, arg: .bool(true))
     }

@@ -194,7 +194,10 @@ final class FileTreeCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineVie
             if outline.isItemExpanded(node) { outline.collapseItem(node) } else { outline.expandItem(node) }
         } else if node.isMarkdown {
             store.open(node.path, pinned: pin)
-            if pin, let tab = store.activeTab, let c = WebViewPool.shared.live(tab.id) { outline.window?.makeFirstResponder(c.webView) }
+            if pin, let tab = store.activeTab, let c = WebViewPool.shared.live(tab.id) {
+                // A new tab's web view joins the window on the next layout pass.
+                DispatchQueue.main.async { c.webView.window?.makeFirstResponder(c.webView) }
+            }
         } else if pin {
             NSWorkspace.shared.open(store.url(for: node.path))
         }
