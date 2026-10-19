@@ -1,0 +1,7 @@
+node_modules/
+core/dist/
+macos/.build/
+build/
+*.dmg
+.DS_Store
+.swiftpm/
