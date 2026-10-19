@@ -1,10 +1,10 @@
-// Code highlighting with Shiki (JavaScript regex engine, bundled grammars).
+// Code highlighting with Shiki (JavaScript regex engine, precompiled bundled grammars).
 // Grammars and themes are bundled as lazy chunks; the ones a document needs are
 // loaded before it renders, so highlighting itself stays synchronous.
 
 import { createHighlighterCore, type HighlighterCore, type ShikiTransformer } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import { bundledLanguages, bundledLanguagesAlias } from "shiki/langs";
+import { precompiledLangs } from "./langs.gen";
 import { bundledThemes } from "shiki/themes";
 import { bGrammar } from "./lang-b";
 
@@ -71,10 +71,7 @@ export function resolveLang(raw: string): string | null {
   if (plainNames.has(lang)) return "text";
   if (bAliases.has(lang)) return "b";
   const alias = extraAliases[lang] ?? lang;
-  if (alias in bundledLanguages) return alias;
-  const viaShiki = (bundledLanguagesAlias as Record<string, unknown>)[alias];
-  if (viaShiki) return alias;
-  return null;
+  return alias in precompiledLangs ? alias : null;
 }
 
 export async function initHighlighter(themes: CodeThemes): Promise<HighlighterCore> {
@@ -113,9 +110,8 @@ export async function ensureLangs(langs: Iterable<string>): Promise<void> {
   const pending: Promise<void>[] = [];
   for (const lang of langs) {
     if (loadedLangs.has(lang) || failedLangs.has(lang)) continue;
-    const loader =
-      (bundledLanguages as Record<string, () => Promise<{ default: unknown }>>)[lang] ??
-      (bundledLanguagesAlias as Record<string, () => Promise<{ default: unknown }>>)[lang];
+    // Precompiled grammars skip the costly Oniguruma → JS regex translation at first use.
+    const loader = precompiledLangs[lang];
     if (!loader) {
       failedLangs.add(lang);
       continue;

@@ -6,6 +6,7 @@ import { DocumentView } from "./renderer/document";
 import { configKey, type MermaidOptions } from "./mermaid/engine";
 import { isExpandedOpen, focusFind as focusDiagramFind, navigate as navigateDiagram, openExpanded } from "./mermaid/expanded";
 import type { EditorHandle } from "./editor/editor";
+import { initHighlighter } from "./renderer/highlight";
 
 const settings: Settings = { ...defaultSettings };
 let forcedAppearance: "light" | "dark" | null = null;
@@ -366,5 +367,7 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.mdview = { receive, version: BRIDGE_VERSION };
+// Warm the highlighter and its themes while the host reads the file.
+void initHighlighter({ light: settings.codeThemeLight, dark: settings.codeThemeDark });
 applySettings();
 postToHost({ type: "ready", version: BRIDGE_VERSION });

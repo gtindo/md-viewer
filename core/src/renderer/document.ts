@@ -55,29 +55,55 @@ export class DocumentView {
     const t0 = performance.now();
     const settings = this.getSettings();
     const themes = { light: settings.codeThemeLight, dark: settings.codeThemeDark };
-    await initHighlighter(themes);
+    if (opts.text.length > LARGE_DOC && opts.path !== this.path) {
+      // Large file just opened: paint the first screens right away (code plain
+      // if its grammar isn't loaded yet), and the whole document on the next task.
+      const head = safePrefix(opts.text, PREFIX_CHARS);
+      this.paint({ ...opts, text: head }, analyzeFences(this.md, head), themes);
+      await new Promise((r) => setTimeout(r, 0));
+      if (seq !== this.renderSeq) return -1;
+    }
     const analysis = analyzeFences(this.md, opts.text);
-    await ensureLangs(analysis.langs);
+    // Don't wait long for grammars: code shows plain first and is patched in
+    // place (morphdom) once its grammar has loaded.
+    const ready = initHighlighter(themes).then(() => ensureLangs(analysis.langs));
+    const loaded = await Promise.race([ready.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 60))]);
     if (seq !== this.renderSeq) return -1; // superseded by a newer render
 
-    const ctx: RenderContext = { themes, mermaid: [], fences: analysis.fences, bDocument: analysis.bDocument };
-    const html = renderMarkdown(this.md, opts.text, ctx);
-    const sctx = { path: opts.path, allowRemoteImages: opts.allowRemoteImages, blockedRemote: 0 };
-    const clean = sanitize(html, sctx);
-    const samePath = opts.path === this.path;
-    this.path = opts.path;
-    this.text = opts.text;
-    this.patch(clean, ctx.mermaid, samePath);
-    this.onBlockedRemote(sctx.blockedRemote);
-    if (this.findQuery) this.runFind(this.findQuery, false);
+    this.paint(opts, analysis, themes);
+    if (!loaded) {
+      void ready.then(() => {
+        if (seq === this.renderSeq) this.paint(opts, analysis, themes);
+      });
+    }
     const ms = Math.round(performance.now() - t0);
-    postToHost({ type: "rendered", path: opts.path, ms, diagrams: ctx.mermaid.length });
+    postToHost({ type: "rendered", path: opts.path, ms, diagrams: this.diagrams.blocks.length });
     if (this.restoring) {
       const st = this.restoring;
       this.restoring = null;
       this.applyScroll(st);
     }
     return ms;
+  }
+
+  private paint(opts: RenderOptions, analysis: ReturnType<typeof analyzeFences>, themes: { light: string; dark: string }): void {
+    const t = [performance.now()];
+    const ctx: RenderContext = { themes, mermaid: [], fences: analysis.fences, bDocument: analysis.bDocument };
+    const html = renderMarkdown(this.md, opts.text, ctx);
+    t.push(performance.now());
+    const sctx = { path: opts.path, allowRemoteImages: opts.allowRemoteImages, blockedRemote: 0 };
+    const clean = sanitize(html, sctx);
+    t.push(performance.now());
+    const samePath = opts.path === this.path;
+    this.path = opts.path;
+    this.text = opts.text;
+    this.patch(clean, ctx.mermaid, samePath);
+    t.push(performance.now());
+    if ((window as { __mdviewProfile?: boolean }).__mdviewProfile) {
+      console.log(`[mdview] markdown ${(t[1] - t[0]).toFixed(0)} ms · sanitize ${(t[2] - t[1]).toFixed(0)} ms · patch ${(t[3] - t[2]).toFixed(0)} ms`);
+    }
+    this.onBlockedRemote(sctx.blockedRemote);
+    if (this.findQuery) this.runFind(this.findQuery, false);
   }
 
   private patch(html: string, mermaid: MermaidSource[], samePath: boolean): void {
@@ -433,6 +459,29 @@ export class DocumentView {
     if (jump && this.findHits.length) this.findStep(1);
     else this.updateFindCount();
   }
+}
+
+const LARGE_DOC = 150_000;
+const PREFIX_CHARS = 40_000;
+
+/** Cut markdown at a blank line outside any fenced block, near `limit` characters. */
+export function safePrefix(text: string, limit: number): string {
+  let inFence: string | null = null;
+  let pos = 0;
+  let lastSafe = 0;
+  for (const line of text.split("\n")) {
+    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (m) {
+      if (!inFence) inFence = m[1][0];
+      else if (m[1][0] === inFence) inFence = null;
+    }
+    pos += line.length + 1;
+    if (!inFence && line.trim() === "") {
+      lastSafe = pos;
+      if (pos >= limit) break;
+    }
+  }
+  return text.slice(0, lastSafe || limit);
 }
 
 // ---------------------------------------------------------------------------

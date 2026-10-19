@@ -5,7 +5,7 @@ import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import footnote from "markdown-it-footnote";
 import { load as loadYaml } from "js-yaml";
-import { escapeHtml, resolveLang, langLabel, highlight, highlightDiff, diffContent, type CodeThemes } from "./highlight";
+import { escapeHtml, resolveLang, langLabel, highlight, highlightDiff, diffContent, isLangReady, type CodeThemes } from "./highlight";
 import { looksLikeB, maybeB } from "./lang-b";
 
 export interface FenceInfo {
@@ -324,9 +324,11 @@ export function createMarkdown(): MarkdownIt {
     const raw = f?.raw ?? "";
     const lang = f?.lang ?? null;
     const html = lang === "diff" ? highlightDiff(t.content, f?.innerLang ?? null, env.themes) : highlight(t.content, lang, env.themes);
+    // Part of the block's identity, so a plain block is re-rendered once its grammar loads.
+    const ready = [lang, f?.innerLang].every((l) => !l || l === "text" || isLangReady(l));
     const label = lang === "diff" && f?.innerLang ? `diff · ${langLabel("", f.innerLang)}` : langLabel(raw, lang);
     return (
-      `<div class="code-block wide" data-line="${line}" data-hash="${hashString(raw + "\u0000" + t.content)}"${lang ? ` data-lang="${escapeHtml(lang)}"` : ""}>` +
+      `<div class="code-block wide" data-line="${line}" data-hash="${hashString(raw + "\u0000" + t.content + (ready ? "\u0001" : ""))}"${lang ? ` data-lang="${escapeHtml(lang)}"` : ""}>` +
       `<div class="code-toolbar"><span class="code-lang">${escapeHtml(label)}</span>` +
       `<button class="code-btn code-wrap" title="Toggle soft wrap" aria-label="Toggle soft wrap">${WRAP_ICON}</button>` +
       `<button class="code-btn code-copy" title="Copy" aria-label="Copy">${COPY_ICON}<span>Copy</span></button></div>` +
