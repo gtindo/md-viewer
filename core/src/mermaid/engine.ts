@@ -75,12 +75,13 @@ export function configKey(opts: MermaidOptions): string {
 
 /** Extract the 1-based line number from Mermaid's various error shapes. */
 export function errorLine(err: unknown): number | undefined {
-  const e = err as { hash?: { loc?: { first_line?: number }; line?: number }; message?: string; str?: string };
-  if (e?.hash?.loc?.first_line) return e.hash.loc.first_line;
-  if (typeof e?.hash?.line === "number") return e.hash.line + 1;
+  const e = err as { hash?: { loc?: { last_line?: number }; line?: number }; message?: string; str?: string };
+  // The line in the message is where the parser stopped, which is what the reader needs.
   const msg = String(e?.message ?? e?.str ?? err);
   const m = /\bline[:\s]+(\d+)/i.exec(msg) ?? /\bLn\s*(\d+)/.exec(msg) ?? /at (\d+):\d+/.exec(msg);
-  return m ? Number(m[1]) : undefined;
+  if (m) return Number(m[1]);
+  if (typeof e?.hash?.line === "number") return e.hash.line + 1;
+  return e?.hash?.loc?.last_line;
 }
 
 function cleanMessage(err: unknown): string {
