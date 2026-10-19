@@ -35,7 +35,7 @@ const isDark = () => (forcedAppearance ? forcedAppearance === "dark" : media.mat
 
 function mermaidOptions(): MermaidOptions {
   const t = settings.mermaidTheme;
-  return { theme: t === "auto" ? (isDark() ? "dark" : "default") : t };
+  return t === "auto" ? { theme: "mdview", dark: isDark() } : { theme: t };
 }
 
 const view = new DocumentView(previewPane, docEl, () => settings, mermaidOptions);

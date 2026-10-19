@@ -114,13 +114,14 @@ private struct DiagramsPane: View {
                 Text("Fit to width").tag("fit")
             }
             Toggle("Show minimap by default", isOn: $settings.prefs.core.showMinimap)
-            Picker("Mermaid theme", selection: $settings.prefs.core.mermaidTheme) {
-                Text("Automatic").tag("auto")
-                Text("Default").tag("default")
-                Text("Dark").tag("dark")
-                Text("Neutral").tag("neutral")
-                Text("Forest").tag("forest")
-                Text("Base").tag("base")
+            Picker("Diagram style", selection: $settings.prefs.core.mermaidTheme) {
+                Text("MDView (follows appearance)").tag("auto")
+                Divider()
+                Text("Mermaid Default").tag("default")
+                Text("Mermaid Dark").tag("dark")
+                Text("Mermaid Neutral").tag("neutral")
+                Text("Mermaid Forest").tag("forest")
+                Text("Mermaid Base").tag("base")
             }
         }
         .formStyle(.grouped)

@@ -3,6 +3,7 @@
 
 import type { Mermaid, MermaidConfig } from "mermaid";
 import { hashString } from "../renderer/markdown";
+import { decorate, flowInfo, mdviewThemeCSS, mdviewThemeVariables, type FlowInfo } from "./style";
 
 export interface RenderedDiagram {
   ok: true;
@@ -30,19 +31,24 @@ const CACHE_LIMIT = 400;
 export const FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Ubuntu, Cantarell, sans-serif';
 
 export interface MermaidOptions {
-  theme: "default" | "dark" | "neutral" | "forest" | "base";
+  /** "mdview" is the app's own soft palette (see style.ts); the rest are Mermaid's themes. */
+  theme: "mdview" | "default" | "dark" | "neutral" | "forest" | "base";
+  /** Light or dark variant of the "mdview" palette. */
+  dark?: boolean;
 }
 
 function buildConfig(opts: MermaidOptions): MermaidConfig {
+  const mdview = opts.theme === "mdview";
   return {
     startOnLoad: false,
     securityLevel: "strict",
-    theme: opts.theme,
+    theme: mdview ? "base" : opts.theme,
     fontFamily: FONT_STACK,
     suppressErrorRendering: true,
     maxTextSize: 5_000_000,
     maxEdges: 20_000,
-    themeVariables: { fontFamily: FONT_STACK },
+    themeVariables: mdview ? mdviewThemeVariables(!!opts.dark, FONT_STACK) : { fontFamily: FONT_STACK },
+    ...(mdview ? { themeCSS: mdviewThemeCSS(!!opts.dark) } : {}),
     flowchart: { htmlLabels: true, useMaxWidth: false },
     sequence: { useMaxWidth: false },
     class: { useMaxWidth: false },
@@ -91,12 +97,13 @@ function cleanMessage(err: unknown): string {
   return msg.length > 2000 ? msg.slice(0, 2000) + "…" : msg;
 }
 
-function measure(svg: string): { width: number; height: number; svg: string } {
+function measure(svg: string, style?: { info?: FlowInfo }): { width: number; height: number; svg: string } {
   // Parse as HTML: label markup inside foreignObject is not always well-formed XML.
   const tpl = document.createElement("template");
   tpl.innerHTML = svg;
   const el = tpl.content.querySelector("svg");
   if (!el) return { width: 800, height: 600, svg };
+  if (style) decorate(el, style.info);
   const vb = el.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
   let width = 0, height = 0;
   if (vb && vb.length === 4 && vb.every(Number.isFinite)) {
@@ -138,8 +145,20 @@ export function renderMermaid(source: string, opts: MermaidOptions): Promise<Dia
     const id = `mmd-${++counter}`;
     let result: DiagramResult;
     try {
+      // The MDView palette colours flowchart nodes by shape and subgraph, which the SVG
+      // alone does not say reliably; ask the parser.
+      let style: { info?: FlowInfo } | undefined;
+      if (opts.theme === "mdview") {
+        let type = "";
+        try {
+          type = mermaid.detectType(source);
+        } catch {
+          /* render() reports the error */
+        }
+        style = { info: type.startsWith("flowchart") ? await flowInfo(mermaid, source) : undefined };
+      }
       const { svg } = await mermaid.render(id, source);
-      result = { ok: true, ...measure(svg) };
+      result = { ok: true, ...measure(svg, style) };
     } catch (err) {
       result = { ok: false, message: cleanMessage(err), line: errorLine(err) };
     } finally {

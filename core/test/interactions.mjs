@@ -314,6 +314,43 @@ await check("state round-trip restores scroll and diagram zoom", async () => {
   assert(Math.abs((await scrollTop()) - 1234) < 2, "scroll not restored");
 });
 
+await check("MDView diagram style: hues by meaning, author styles win, CSS travels with the SVG", async () => {
+  const src = [
+    "flowchart LR",
+    "  top[Top level] --> q{Decide?}",
+    "  q --> inner[Inside]",
+    "  q --> mine[Styled by author]",
+    "  subgraph grp[Group]",
+    "    inner",
+    "  end",
+    "  classDef hot fill:#ff0000,stroke:#000000",
+    "  class mine hot",
+  ].join("\n");
+  await send({ type: "render", payload: { path: "style.md", text: "```mermaid\n" + src + "\n```\n", reason: "open" } });
+  await send({ type: "renderAllDiagrams" });
+  const r = await page.evaluate(() => {
+    const svg = document.querySelector(".mermaid-block .mmd-content svg");
+    const node = (id) => [...svg.querySelectorAll("g.node")].find((n) => n.id.includes(`-flowchart-${id}-`));
+    const hue = (el) => [...(el?.classList ?? [])].find((c) => c.startsWith("mdv-"));
+    const shape = (id) => node(id)?.querySelector(".label-container");
+    return {
+      top: hue(node("top")),
+      q: hue(node("q")),
+      inner: hue(node("inner")),
+      cluster: hue(svg.querySelector("g.cluster")),
+      mineFill: getComputedStyle(shape("mine")).fill,
+      rx: shape("top")?.getAttribute("rx"),
+      cssInSvg: svg.querySelector("style")?.textContent.includes(".mdv-amber") ?? false,
+    };
+  });
+  assert(r.top === "mdv-blue", `top=${r.top}`);
+  assert(r.q === "mdv-amber", `decision=${r.q}`);
+  assert(r.inner && r.inner === r.cluster && r.inner !== "mdv-blue", `inner=${r.inner} cluster=${r.cluster}`);
+  assert(/255,\s*0,\s*0/.test(r.mineFill), `author classDef lost: ${r.mineFill}`);
+  assert(Number(r.rx) > 0, `rx=${r.rx}`);
+  assert(r.cssInSvg, "theme CSS not embedded in the SVG");
+});
+
 await check("300-node flowchart renders and zooms smoothly", async () => {
   const big = await readFile(path.join(fixtures, "large-flowchart.md"), "utf8");
   const t0 = Date.now();

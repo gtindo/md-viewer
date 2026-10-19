@@ -43,6 +43,20 @@ A diagram becomes "engaged" after a pinch; two-finger scroll then pans it until
 the pointer leaves or Esc is pressed. Syntax errors show an error card with the
 offending line, and the last good render stays visible while you fix it.
 
+## Diagram style
+
+Diagrams use MDView's own palette by default (Settings → Diagrams → Diagram
+style), with light and dark variants that follow the app's appearance:
+
+- Soft tinted fills, thin borders a shade darker, and rounded corners.
+- Colour carries meaning: decisions are amber, start and end steps green,
+  databases violet. Each subgraph gets its own pale tint, and its nodes share it.
+- Sequence actors, classes and ER entities each get their own colour.
+
+Your own `style`, `classDef` and `linkStyle` statements still take precedence.
+The styling is embedded in the SVG, so copied and exported diagrams look the
+same. Mermaid's built-in themes remain available in the same menu.
+
 ## B-Method
 
 Fences tagged `b`, `bmethod`, `b-method`, `classicalb`, `mch`, `ref`, `imp` or
