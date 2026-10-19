@@ -1,7 +1,7 @@
 // The light markdown editor: CodeMirror 6 with fenced-code highlighting
 // (including Mermaid and B), smart lists, search/replace and optional vim keys.
 
-import { EditorState, Compartment, EditorSelection, type Extension } from "@codemirror/state";
+import { EditorState, Compartment, EditorSelection, Transaction, type Extension } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection,
   dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars,
@@ -32,7 +32,8 @@ export interface EditorOptions {
 
 export interface EditorHandle {
   getText(): string;
-  setText(text: string, opts?: { preserveCursor?: boolean }): void;
+  /** Replace the text from outside (file load or reload); not an undoable edit. `newDocument` also clears undo history. */
+  setText(text: string, opts?: { preserveCursor?: boolean; newDocument?: boolean }): void;
   setReadOnly(ro: boolean): void;
   setOptions(o: { lineNumbers?: boolean; vim?: boolean }): void;
   focus(): void;
@@ -127,6 +128,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
   const gutter = new Compartment();
   const readOnly = new Compartment();
   const vimMode = new Compartment();
+  const undoHistory = new Compartment();
   let suppress = false;
 
   const wrapper = document.createElement("div");
@@ -139,7 +141,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     vimMode.of([]),
     gutter.of(gutterExt(opts.lineNumbers)),
     highlightSpecialChars(),
-    history(),
+    undoHistory.of(history()),
     drawSelection(),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
@@ -217,10 +219,15 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): EditorHa
     setText(text, o) {
       const cur = view.state.selection.main.head;
       suppress = true;
+      // Dropping and re-adding the history extension empties the undo stack, so a reused
+      // preview tab cannot undo the previous file's edits into this one.
+      if (o?.newDocument) view.dispatch({ effects: undoHistory.reconfigure([]) });
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: text },
         selection: o?.preserveCursor ? { anchor: Math.min(cur, text.length) } : { anchor: 0 },
+        annotations: Transaction.addToHistory.of(false),
       });
+      if (o?.newDocument) view.dispatch({ effects: undoHistory.reconfigure(history()) });
       suppress = false;
     },
     setReadOnly(ro) {

@@ -245,6 +245,56 @@ await check("split mode: editor shows the text and typing re-renders the preview
   await send({ type: "setMode", mode: "preview" });
 });
 
+await check("editor: loading a file is not undoable, and a new file starts a fresh history", async () => {
+  await send({ type: "setMode", mode: "split" });
+  await send({ type: "render", payload: { path: "a.md", text: "alpha\n", reason: "open" } });
+  await page.evaluate(() => document.querySelector(".cm-content").focus());
+  await page.keyboard.press("Meta+ArrowUp");
+  await page.keyboard.type("A");
+  // A reused preview tab: same editor, another file.
+  await send({ type: "render", payload: { path: "b.md", text: "beta\n", reason: "open" } });
+  await page.evaluate(() => document.querySelector(".cm-content").focus());
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Meta+z");
+  const text = (await send({ type: "getText" })).text;
+  assert(text === "beta\n", `after undo: ${JSON.stringify(text)}`);
+  await send({ type: "setMode", mode: "preview" });
+});
+
+await check("switching to Split refits diagrams to the narrower pane", async () => {
+  await send({ type: "setMode", mode: "preview" });
+  await send({ type: "render", payload: { path: "small.md", text: "# Small\n\n```mermaid\nflowchart LR\n  A --> B\n```\n", reason: "open" } });
+  await send({ type: "renderAllDiagrams" });
+  await send({ type: "setMode", mode: "split" });
+  await page.waitForTimeout(400);
+  const r = await page.evaluate(() => {
+    const vp = document.querySelector(".mmd-viewport").getBoundingClientRect();
+    const svg = document.querySelector(".mmd-content svg").getBoundingClientRect();
+    return { left: svg.left - vp.left, right: vp.right - svg.right };
+  });
+  assert(r.left >= 0 && r.right >= 0 && Math.abs(r.left - r.right) < 4, `not centred in viewport: ${JSON.stringify(r)}`);
+  await send({ type: "setMode", mode: "preview" });
+});
+
+await check("the preview pane holds focus so space and arrows scroll it", async () => {
+  await send({ type: "render", payload: { path: "fixtures/showcase.md", text: doc, reason: "open" } });
+  await page.evaluate(() => {
+    document.activeElement?.blur();
+    document.querySelector("#preview-pane").scrollTop = 0;
+  });
+  await page.waitForTimeout(50);
+  assert(await page.evaluate(() => document.activeElement?.id === "preview-pane"), "focus not parked on the pane");
+  await page.keyboard.press("PageDown");
+  await page.waitForTimeout(400);
+  assert((await scrollTop()) > 100, `scrollTop=${await scrollTop()}`);
+});
+
+await check("toolbar buttons don't force compositing layers (keeps zoomed SVG sharp)", async () => {
+  const filters = await page.evaluate(() =>
+    [...document.querySelectorAll(".mmd-btn, .code-btn")].slice(0, 20).map((b) => getComputedStyle(b).backdropFilter || getComputedStyle(b).webkitBackdropFilter || "none"),
+  );
+  assert(filters.length > 0 && filters.every((f) => f === "none"), filters.join(","));
+});
+
 await check("find in document highlights matches", async () => {
   await send({ type: "command", command: "find" });
   await page.fill(".find-bar input", "filler");

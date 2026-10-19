@@ -242,9 +242,11 @@ async function receive(msg: HostToCore): Promise<unknown> {
       document.title = p.path.split("/").pop() ?? "";
       if (editor) {
         editor.setReadOnly(!editable);
-        if (editor.getText() !== p.text) editor.setText(p.text, { preserveCursor: !pathChanged });
+        if (editor.getText() !== p.text) editor.setText(p.text, { preserveCursor: !pathChanged, newDocument: pathChanged });
+        else if (pathChanged) editor.setText(p.text, { newDocument: true });
       }
       const ms = await view.render({ path: p.path, text: p.text, allowRemoteImages: allowRemote });
+      if (document.hasFocus()) focusPreviewIfIdle();
       return { ms };
     }
     case "setSettings": {
@@ -365,6 +367,16 @@ async function command(cmd: string, _arg?: unknown): Promise<unknown> {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && view && !isExpandedOpen()) view.closeFind();
 });
+
+// The document scrolls inside #preview-pane, not the page, so WebKit's keyboard scrolling
+// (space, arrows, page keys) only works while focus is inside the pane. Park focus there
+// whenever it would otherwise sit on the body.
+function focusPreviewIfIdle(): void {
+  const a = document.activeElement;
+  if ((!a || a === document.body) && mode !== "edit") previewPane.focus({ preventScroll: true });
+}
+window.addEventListener("focus", focusPreviewIfIdle);
+document.addEventListener("focusout", () => setTimeout(() => document.hasFocus() && focusPreviewIfIdle(), 0));
 
 window.mdview = { receive, version: BRIDGE_VERSION };
 // Warm the highlighter and its themes while the host reads the file.

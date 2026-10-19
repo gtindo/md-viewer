@@ -194,6 +194,7 @@ body { display: flex; flex-direction: column; }
   overflow: auto;
   overscroll-behavior: contain;
   position: relative;
+  outline: none;
 }
 
 #main.mode-split #editor-pane { display: flex; flex: 0 0 50%; min-width: 0; position: relative; }
@@ -458,8 +459,9 @@ body { display: flex; flex-direction: column; }
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: default;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  /* No backdrop-filter here: it gives every button its own compositing layer, and WebKit then
+     composites the zoomed diagram painted after the expanded viewer's buttons too, scaling a
+     bitmap instead of repainting the SVG (blurry at high zoom). */
 }
 .code-btn:hover, .mmd-btn:hover { color: var(--fg); background: var(--bg-inset); }
 .code-btn.copied { color: var(--success); }

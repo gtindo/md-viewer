@@ -76,9 +76,15 @@ export class PanZoom {
   // -------------------------------------------------------------------------
   // Geometry
 
+  /** Breathing room around a fitted diagram; inline blocks get theirs from CSS padding. */
+  private get fitMargin(): number {
+    return this.opts.mode === "expanded" ? 24 : 0;
+  }
+
   fitScale(kind: "contain" | "width" = "contain"): number {
-    const sx = this.vw / this.w;
-    const sy = this.vh / this.h;
+    const m = this.fitMargin;
+    const sx = Math.max(1, this.vw - 2 * m) / this.w;
+    const sy = Math.max(1, this.vh - 2 * m) / this.h;
     return this.clampScale(kind === "width" ? sx : Math.min(sx, sy));
   }
 

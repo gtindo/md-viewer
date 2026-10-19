@@ -307,12 +307,17 @@ export class DocumentView {
       postToHost({ type: "hoverLink", href: null });
     });
 
-    window.addEventListener("resize", () => {
+    // Width changes come from the window, the sidebar, the split divider and mode switches
+    // (Preview → Split narrows the pane without resizing the window); refit diagrams on all.
+    let pending = 0;
+    new ResizeObserver(() => {
       const w = this.root.clientWidth;
-      if (w === this.lastWidth) return;
+      if (w === 0 || w === this.lastWidth) return; // hidden in Edit mode
       this.lastWidth = w;
-      this.diagrams.relayout();
-    });
+      // Coalesce the per-frame callbacks of a divider drag or window resize.
+      clearTimeout(pending);
+      pending = window.setTimeout(() => this.diagrams.relayout(), 80);
+    }).observe(this.root);
   }
 
   private followLink(a: HTMLAnchorElement, e: MouseEvent): void {
